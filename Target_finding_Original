@@ -1,0 +1,55 @@
+#目标人脸判断
+#返回值
+#时间：2019/11/21
+import face_recognition
+
+
+
+
+def image_handle(image_ip):
+    image=face_recognition.load_image_file(image_ip)
+    face_locations=face_recognition.face_locations(image)
+    faceNum = len(face_locations)
+    # 读取原图，准备做标志
+    pil_image = Image.fromarray(image)
+    for i in range(0, faceNum):
+        # 面部区域的四个坐标
+        top = face_locations[i][0]
+        right = face_locations[i][1]
+        bottom = face_locations[i][2]
+        left = face_locations[i][3]
+        # 画图
+        d = ImageDraw.Draw(pil_image, 'RGBA')
+        d.rectangle((left, top, right, bottom), outline="#510DAB")
+
+    # 显示标志后的图片
+    pil_image.show()
+    
+
+def image_judge(known_image,unknown_image):
+    #获取面部编码
+    known_image = face_recognition.load_image_file(known_image)
+    unknown_image = face_recognition.load_image_file(unknown_image)
+    #返回一个编码列表
+    
+    obama_encoding = face_recognition.face_encodings(known_image)[0]
+    unknown_encoding1 = face_recognition.face_encodings(unknown_image)
+    #print(unknown_encoding1)
+   #
+    for i in range(len(unknown_encoding1)):
+        if face_recognition.compare_faces([obama_encoding], unknown_encoding1[i],tolerance=0.42)[0]:#判断
+            print("1")
+        else:
+            print("0")
+    #if face_recognition.compare_faces([obama_encoding], unknown_encoding1):
+        #print("true")
+   # else:
+     #   print("0")
+    
+    #results = face_recognition.compare_faces([obama_encoding], unknown_encoding)
+    #if results[0] == True:
+       # print("It's a picture of Obama!")
+    #else:
+      #  print("It's not a picture of Obama!")
+if __name__ == "__main__":
+    image_judge('test/360.jpg','test/001.jpg')
