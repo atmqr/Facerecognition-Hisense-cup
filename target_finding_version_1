@@ -1,0 +1,47 @@
+import cv2
+import  os
+import face_recognition
+from PIL import Image, ImageDraw
+from PyFaceDet import facedetectcnn
+from threading import Timer
+def image_judge(known_image, unknown_image, flag):
+    # 获取面部编码
+    known_image = face_recognition.load_image_file(known_image)
+    unknown_image = face_recognition.load_image_file(unknown_image)
+    # 返回一个编码列表
+
+    obama_encoding = face_recognition.face_encodings(known_image)[0]
+    unknown_encoding1 = face_recognition.face_encodings(unknown_image)
+    # print(unknown_encoding1)
+    #
+    for i in range(len(unknown_encoding1)):
+        if face_recognition.compare_faces([obama_encoding], unknown_encoding1[flag], tolerance=0.6)[0]:  # 判断
+            return True
+        else:
+            return False
+
+def image_handle(known_image,image_ip):
+    image=face_recognition.load_image_file(image_ip)
+    face_locations=face_recognition.face_locations(image)
+    faceNum = len(face_locations)
+    print("人脸个数是:",faceNum)
+    # 读取原图，准备做标志
+    pil_image = Image.fromarray(image)
+    for i in range(0, faceNum):
+        # 面部区域的四个坐标
+        top = face_locations[i][0]
+        right = face_locations[i][1]
+        bottom = face_locations[i][2]
+        left = face_locations[i][3]
+        # 画图
+        if image_judge(known_image,image_ip,i):
+            d = ImageDraw.Draw(pil_image, 'RGBA')
+            d.rectangle((left, top, right, bottom), outline="#A00DAB")
+        else:
+            d = ImageDraw.Draw(pil_image, 'RGBA')
+            d.rectangle((left, top, right, bottom), outline="#0DABA0")
+
+    # 显示标志后的图片
+    pil_image.show()
+if __name__ == "__main__":
+    image_handle('test/360.jpg','test/001.jpg')
