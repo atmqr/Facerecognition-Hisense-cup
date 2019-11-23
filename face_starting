@@ -1,0 +1,152 @@
+#times:2019/11/22
+#完整源代码
+#实现一边截取人脸一边删除人脸
+#上诉功能改进，修复部分bug
+#时间：2019年11月20日
+#功能实现：实现全人脸识别画框，从图片中找出所有的人脸然后画上方框
+#剩下功能：存储处理好的照片
+#完成附加项
+
+#人脸新想法
+#libfacedetection for python dlls只能做到任意角度的人脸识别，但是不能做到68个点个人脸计算
+#尝试用libfacedetection与face_recognition进行结合
+#做到快速计算的同时，也能对比出人脸
+#
+#
+#优点：图像录入的速度很满意，能达到目的
+#
+#缺点：图像的计算速度很慢，6个人需要7/8秒
+#
+#待完善点：1.图像处理完毕以后应该结束全部过程  2.人脸对比，从采集到的图像中找到目标人  3.描述人物
+#
+#新想法：用于仕琪老师python接口，裁剪出人脸，然后交给face_recognition进行计算（2019/11/20）
+#
+#
+#时间：2019/11/22
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+##############################################################################################################################################
+import cv2
+import  os
+import face_recognition
+from PIL import Image, ImageDraw
+from PyFaceDet import facedetectcnn
+from threading import Timer
+
+cap = cv2.VideoCapture(1)
+
+#目标人脸判断
+def image_judge(known_image, unknown_image, flag):
+    # 获取面部编码
+    known_image = face_recognition.load_image_file(known_image)
+    unknown_image = face_recognition.load_image_file(unknown_image)
+    # 返回一个编码列表
+
+    obama_encoding = face_recognition.face_encodings(known_image)[0]
+    unknown_encoding1 = face_recognition.face_encodings(unknown_image)
+    # print(unknown_encoding1)
+    #
+    for i in range(len(unknown_encoding1)):
+        #返回的是一个True或者一个False的列表
+        if face_recognition.compare_faces([obama_encoding], unknown_encoding1[flag], tolerance=0.43)[0]:  # 判断  tolerance值越小越精确
+            return True
+        else:
+            return False
+#画图函数（对目标人和非目标人进行区别）
+def image_handle(known_image,image_ip):
+    image=face_recognition.load_image_file(image_ip)
+    face_locations=face_recognition.face_locations(image)
+    faceNum = len(face_locations)
+    print("人脸个数是:",faceNum)
+    # 读取原图，准备做标志
+    pil_image = Image.fromarray(image)
+    for i in range(0, faceNum):
+        # 面部区域的四个坐标
+        top = face_locations[i][0]
+        right = face_locations[i][1]
+        bottom = face_locations[i][2]
+        left = face_locations[i][3]
+        # 画图
+        if image_judge(known_image,image_ip,i):
+            d = ImageDraw.Draw(pil_image, 'RGBA')
+            d.rectangle((left, top, right, bottom), outline="#A00DAB")#目标人物用紫色圈出来
+        else:
+            d = ImageDraw.Draw(pil_image, 'RGBA')
+            d.rectangle((left, top, right, bottom), outline="#0DABA0")#非目标人物则用蓝色圈出来
+
+    # 显示标志后的图片
+    pil_image.show()
+
+
+#图像处理函数
+def image_handles(image_ip):
+    image=face_recognition.load_image_file(image_ip)
+    face_locations=face_recognition.face_locations(image)
+    faceNum = len(face_locations)
+    # 读取原图，准备做标志
+    pil_image = Image.fromarray(image)
+    for i in range(0, faceNum):
+        # 面部区域的四个坐标
+        top = face_locations[i][0]
+        right = face_locations[i][1]
+        bottom = face_locations[i][2]
+        left = face_locations[i][3]
+        # 画图
+        d = ImageDraw.Draw(pil_image, 'RGBA')
+        d.rectangle((left, top, right, bottom), outline="#00FF00")
+
+    # 显示标志后的图片
+    pil_image.show()
+
+#处理图片PyFaceDet（对图像进行采集，当识别到全部人脸以后就进行拍照）
+def PyFace_image(image_path,close_win):
+    img=cv2.imread(image_path)
+    Faces=facedetectcnn.facedetect_cnn(image_path)
+    #print(len(Faces))  #计算元组的长度
+    for i in range(len(Faces)):
+        x = Faces[i][0]
+        y = Faces[i][1]
+        L = Faces[i][2] 
+        W = Faces[i][3]
+        confidence = Faces[i][4]
+        angle = Faces[i][5]
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.rectangle(img, (x, y), (x + L, y + W), (34, 139, 34), 2)  # 图片，左上角坐标，右下角坐标，画线对应RGB
+        roi_color = img[y:y + W, x:x + L]
+        cv2.putText(img, str(confidence), (x + 5, y - 5), font, 1, (0, 0, 255), 1)  # 图片，添加的文字，左上角坐标，字体，字体大小，颜色，字体粗细
+        cv2.imshow('camera', img)
+        if i==5:  # 人脸个数控制
+            return True
+        k = cv2.waitKey(close_win)  # 等待close_win毫秒后关闭显示的窗口
+        
+#存图片
+def write_image(start_id,times):
+    while(1):
+        ret,frame = cap.read()
+        cv2.imshow('capture',frame)
+        if(start_id % times == 0):
+            cv2.imwrite("test\\"+ str(1) + ".jpg",frame)
+            if PyFace_image('test\\1.jpg',100):
+                print("我找到全部人脸了，我要开始保存了！！！")
+                cv2.imwrite("test1\\"+ "thnu_jqr_" + ".jpg",frame)
+                #开始执行函数进行图像处理
+                image_handle('test1/thnu_jqr_.jpg')
+                print("图像处理完毕！！！")
+            #cv2.imwrite("test1\\"+ str(start_id) + ".jpg",frame)
+        start_id = start_id + 1
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+cv2.destroyAllWindows()
+if __name__ == "__main__":
+    write_image(1,120)
