@@ -1,0 +1,28 @@
+#人脸特征
+
+import face_recognition
+ 
+# Load the jpg file into a numpy array
+from PIL import Image, ImageDraw
+ 
+image = face_recognition.load_image_file("test/zy1.jpg")
+ 
+# 找出图片中所有人脸的面部特征
+face_landmarks_list = face_recognition.face_landmarks(image)#返回字典
+arr=face_landmarks_list[0]
+#print(arr['top_lip'])
+#print(arr['bottom_lip'])
+
+ 
+# 创建一个PIL ImageDraw对象，后面用于图像绘制
+pil_image = Image.fromarray(image)
+d = ImageDraw.Draw(pil_image)
+        
+for i in face_landmarks_list:
+    #print(i.keys())
+    for facial_feature in i.keys():
+        if facial_feature == 'top_lip' or facial_feature=='bottom_lip':
+            d.line(i[facial_feature], width=10)
+ 
+# Show the picture
+pil_image.show()
