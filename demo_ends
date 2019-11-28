@@ -1,0 +1,342 @@
+# times:2019/11/28
+# auther:asatmda
+# demo版本
+# 相关功能：
+#        1.对嘴巴进行框选（使用纯白色的点对目标进行覆盖）
+#        2.对人脸进行框选（区别出目标人和非目标人）
+#        3.肤色排序
+
+
+# demo
+# time:2019/11/28
+
+# 配置文件+参数调整
+import cv2
+import os
+import face_recognition
+from PIL import Image, ImageDraw
+import PIL.Image
+from PyFaceDet import facedetectcnn
+from threading import Timer
+import matplotlib.image as mp
+import numpy as np
+from pylab import *
+
+# 设置摄像头参数
+
+cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FPS, 100)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('M', 'J', 'P', 'G'))
+# 全局自动调阈值
+tole = [0.6, 0.58, 0.56, 0.54, 0.52, 0.51, 0.5, 0.48, 0.45, 0.43, 0.42, 0.4, 0.38, 0.35]
+tj = 0
+numer=1
+w=np.load('w.npy')
+b = np.load('b.npy')
+w_h = np.load('w_h.npy')
+b_h = np.load('b_h.npy')
+
+# 图像分割保存函数
+def save_face(imgaa):
+    # Load the jpg file into a numpy array
+    image = face_recognition.load_image_file(imgaa, 'RGB')
+    face_locations = face_recognition.face_locations(image)
+    flag_image = 1
+    for face_location in face_locations:
+        # 打印每张脸的位置
+        top, right, bottom, left = face_location
+        # print("人脸位于像素位置顶部: {}, Left: {}, Bottom: {}, Right: {}".format(top, left, bottom, right))
+        # You can access the actual face itself like this:
+        face_image = image[top:bottom, left:right]
+        pil_image = Image.fromarray(face_image)
+        mp.imsave("save/" + str(flag_image) + ".jpg", face_image)
+        flag_image = flag_image + 1
+def change_photo_size28(path,spath):
+    '''
+    将人脸图片转化为28*28的灰度图片
+    '''
+    filenames = os.listdir(path)
+    for filename in filenames:
+        f = os.path.join(path,filename)
+        iimag = PIL.Image.open(f).convert('L').resize((28,28))
+        savepath = os.path.join(spath,filename)
+        iimag.save(savepath)
+
+#读取图片信息
+def read_photo_for_train(k,photo_path):
+    '''
+    读取训练图片
+    '''
+    for i in range(k):
+        j = i
+        j = str(j)
+        st = '.jpg'
+        j = j+st
+        j = os.path.join(photo_path,j)
+        im1 = array(Image.open(j).convert('L'))
+        #（28，28）-->(28*28,1)
+        im1 = im1.reshape((784,1))
+        #把所有的图片灰度值放到一个矩阵中
+        #一列代表一张图片的信息
+        if i == 0:
+            im = im1
+        else:
+            im = np.hstack((im,im1))
+    return im
+
+#求值
+def layerout(w,b,x):
+    '''
+    sigmoid函数实现
+    '''
+    y = np.dot(w,x) + b
+    t = -1.0*y
+    # n = len(y)
+    # for i in range(n):
+        # y[i]=1.0/(1+exp(-y[i]))
+    y = 1.0/(1+exp(t))
+    return y
+
+#判断函数
+def mytest(x_test,w,b,w_h,b_h):
+    '''
+    预测结果pre大于0.5，为男；预测结果小于或等于0.5为女
+    '''
+
+    hid = layerout(w_h,b_h,x_test)
+    pre = layerout(w,b,hid)
+    print(pre)
+    if pre > 0.5:
+        print("hello,boy!")
+    else:
+        print("hello,girl!")
+
+
+def test_sex(path,spath,num_face):
+    # 变为28*28的灰度图片
+    change_photo_size28(path,spath)
+    # 获取图片信息
+    im=read_photo_for_train(num_face,spath)
+    # 归一化
+    immin = im.min()
+    immax = im.max()
+    im = (im - immin) / (immax - immin)
+    x_test = im
+    for i in range(num_face):
+        xx = x_test[:, i]
+        xx = xx.reshape((784, 1))
+        mytest(xx, w, b, w_h, b_h)
+
+# 肤色处理阶段
+def rgb_to_hex(imgaa):
+    img = Image.open(imgaa)
+    search_image = img.getcolors(img.size[0] * img.size[1])
+    max_num = search_image[0]
+    for i in search_image:
+        if (i[0] > max_num[0]):
+            max_num = i
+    strs = ''
+    for i in max_num[1]:
+        num = int(i)  # 将str转int
+        # 将R、G、B分别转化为16进制拼接转换并大写
+        strs += str(hex(num))[-2:].replace('x', '0').upper()
+    return strs
+
+
+# 肤色排序
+def skin_sorts():
+    global numer
+    arr = {}
+    for i in range(0, 2):
+        imgaa = 'image/save/' + str(i) + '.jpg'
+        arr[i] = rgb_to_hex(imgaa)
+
+    list1 = sorted(arr.items(), key=lambda x: x[1])
+    print(list1)
+    f = open('skins'+str(numer)+' by sort.txt', 'w')
+    f.write("Here is the order by skin tone depth (from dark to light):" + "\n")
+    for i in list1:
+        f.write(str(i[0]) + ".jpg" + "   ")
+    print("Skin color treatment completed!")
+    f.close()
+
+
+# 图像处理阶段（目标人脸识别和）
+
+def image_judge(known_image, unknown_image, flag):
+    # 获取目标人面部编码
+    global tole
+    global tj
+    known_image = face_recognition.load_image_file(known_image)
+    unknown_image = face_recognition.load_image_file(unknown_image)
+
+    # 返回一个待测人群的面部编码
+    obama_encoding = face_recognition.face_encodings(known_image)[0]
+    unknown_encoding1 = face_recognition.face_encodings(unknown_image)
+    # print(unknown_encoding1)
+    #
+    # for i in range(len(unknown_encoding1)):
+    # 返回的是一个True或者一个False的列表
+    if face_recognition.compare_faces([obama_encoding], unknown_encoding1[flag], tolerance=tole[tj])[
+        0]:  # 判断  tolerance值越小越精确
+        return True
+    else:
+        return False
+
+
+def image_handle(known_image, image_ip):
+    global tole
+    global tj
+    global numer
+    image = face_recognition.load_image_file(image_ip)
+    face_locations = face_recognition.face_locations(image)
+    face_landmarks_list = face_recognition.face_landmarks(image)  # 返回字典
+    arr = face_landmarks_list[0]
+    faceNum = len(face_locations)
+    # print(image)
+    print("人脸个数是:", faceNum)
+    # 读取原图，准备做标志
+    pil_image = Image.fromarray(image)
+    arr = []
+    mubiao = 0
+    flag_image = 1
+    for i in range(0, faceNum):
+        # 面部区域的四个坐标
+        top = face_locations[i][0]
+        right = face_locations[i][1]
+        bottom = face_locations[i][2]
+        left = face_locations[i][3]
+        face_image = image[top:bottom, left:right]
+        # 画图
+        if image_judge(known_image, image_ip, i):
+            d = ImageDraw.Draw(pil_image, 'RGBA')
+            d.rectangle((left, top, right, bottom), outline="#A00DAB")  # 目标人物用紫色圈出来
+            arr.append(i)
+            mubiao = mubiao + 1
+        else:
+            d = ImageDraw.Draw(pil_image, 'RGBA')
+            d.rectangle((left, top, right, bottom), outline="#0DABA0")  # 非目标人物则用蓝色圈出来
+
+        # cv2.putText(d, str(flag_image), (top, right), font, 2, (0, 250, 0))
+        # cv2.putText(face_image, str(flag_image), ((left + right) // 2, (top + bottom) // 2), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (133, 255, 133), 2)
+        flag_image = flag_image + 1
+        # 画嘴巴部分
+        if i == faceNum - 1:
+            # d = ImageDraw.Draw(pil_image)
+            for i in face_landmarks_list:
+                for facial_feature in i.keys():
+                    if facial_feature == 'top_lip' or facial_feature == 'bottom_lip':
+                        d.line(i[facial_feature], width=10)
+            # img = cv2.cvtColor(numpy.asarray(face_image),cv2.COLOR_RGB2BGR)
+            # cv2.imwrite("image/end_image/"+'thnu_jqr_ends'+".jpg",img)
+
+    # 阈值
+    while True:
+        print(mubiao, tole[tj])
+        if len(arr) > 1:
+            tj = tj + 1
+            for i in arr:
+                # 面部区域的四个坐标
+                top = face_locations[i][0]
+                right = face_locations[i][1]
+                bottom = face_locations[i][2]
+                left = face_locations[i][3]
+                # 画图
+                if image_judge(known_image, image_ip, i):
+                    d = ImageDraw.Draw(pil_image, 'RGBA')
+                    d.rectangle((left, top, right, bottom), outline="#A00DAB")  # 目标人物用紫色圈出来
+                else:
+                    d = ImageDraw.Draw(pil_image, 'RGBA')
+                    d.rectangle((left, top, right, bottom), outline="#0DABA0")  # 非目标人物则用蓝色圈出来
+                    arr.remove(i)
+                    mubiao = mubiao - 1
+        elif len(arr) < 1:
+            tj = tj - 1
+            for i in range(0, faceNum):
+                # 面部区域的四个坐标
+                top = face_locations[i][0]
+                right = face_locations[i][1]
+                bottom = face_locations[i][2]
+                left = face_locations[i][3]
+                # 画图
+                if image_judge(known_image, image_ip, i):
+                    arr.append(i)
+                    mubiao = mubiao + 1
+                # else:
+                #   d = ImageDraw.Draw(pil_image, 'RGBA')
+                #  d.rectangle((left, top, right, bottom), outline="#0DABA0")  # 非目标人物则用蓝色圈出来
+        else:
+            break
+    # 显示标志后的图片
+    pil_image.show()
+    img = cv2.cvtColor(np.asarray(pil_image), cv2.COLOR_RGB2BGR)
+    cv2.imwrite("image/end_image/" + 'thnu_jqr_ends' +str(numer)+ ".jpg", img)  # 最终图片（包含嘴巴，人脸的框选）
+    numer=numer+1
+    if numer==3:
+        print("save 6")
+        return 1
+
+# 处理图片PyFaceDet（对图像进行采集，当识别到全部人脸以后就进行拍照）
+def PyFace_image(image_path, close_win):
+    img = cv2.imread(image_path)
+    Faces = facedetectcnn.facedetect_cnn(image_path)
+    # flag_image = 1
+    for i in range(len(Faces)):
+        x = Faces[i][0]
+        y = Faces[i][1]
+        L = Faces[i][2]
+        W = Faces[i][3]
+        confidence = Faces[i][4]
+        angle = Faces[i][5]
+        # 保存一次图像，并且对图像进行切割，肤色排序等操作
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        # image_handle('image\\bass\\10.jpg',image_path)
+        cv2.rectangle(img, (x, y), (x + L, y + W), (34, 139, 34), 1)  # 图片，左上角坐标，右下角坐标，画线对应RGB
+        roi_color = img[y:y + W, x:x + L]
+        cv2.imwrite("image/save/" + str(i) + ".jpg", roi_color)  # 把图像中出现的人脸切割出来保存，并且按照出现的顺序编号
+        cv2.putText(img, str(i), (x + 5, y - 5), font, 1, (0, 0, 255), 1)  # 图片，添加的文字，左上角坐标，字体，字体大小，颜色，字体粗细
+        cv2.imshow('camera', img)
+        if i == 1:  # 人脸个数控制
+            cv2.imwrite("image/end_image/" + '666_thnu_jqr_' + ".jpg", img)  # 保存最终图像，直接在保存的图像上编号
+            # 对肤色进行处理
+            skin_sorts()
+            return True
+        k = cv2.waitKey(close_win)  # 等待close_win毫秒后关闭显示的窗口
+
+
+# 存图片函数
+def write_image(start_id, times):
+    while (1):
+        ret, frame = cap.read()
+        cv2.imshow('capture', frame)
+        if (start_id % times == 0):
+            # 每隔times帧处理一张
+            cv2.imwrite("image/" + str(1) + ".jpg", frame)
+            # 如果找到六个人就保存
+            if PyFace_image('image/1.jpg', 100):
+                print("我找到全部人脸了，我要开始保存了！！！")
+                # 保存已经找到的六张人脸
+                cv2.imwrite("image/ok/" + "thnu_jpr_" + ".jpg", frame)
+                #######################################################
+                # 图像处理阶段
+                # 1.判断是否为目标人，对目标人用紫色框选，其他人用蓝色框选
+                #性别识别
+                test_sex('image/save','image/save',2)
+                #匡选人脸
+                if image_handle('image/target/10.jpg', "image/end_image/666_thnu_jqr_.jpg"):
+                    print('asdlkjflks')
+                    break
+                # 对图像进行切割
+                print("图像存起来了！！！")
+            # cv2.imwrite("test1/"+ str(start_id) + ".jpg",frame)
+        start_id = start_id + 1
+
+
+cv2.destroyAllWindows()
+# 主函数调用
+if __name__ == "__main__":
+    # 这里是调用的内容
+    time.sleep(10)#延时10秒执行
+    write_image(1, 120)
