@@ -1,0 +1,125 @@
+#配置文件+参数调整
+#对人脸画框，标注出目标人脸和非目标人脸。并且用颜色区别
+#对嘴巴进行绘画（特征）
+import cv2
+import os
+import face_recognition
+from PIL import Image, ImageDraw
+from PyFaceDet import facedetectcnn
+from threading import Timer
+import matplotlib.image as mp
+import numpy
+
+tole = [0.6,0.58,0.56,0.54,0.52,0.51,0.5, 0.48, 0.45, 0.43, 0.42, 0.4, 0.38, 0.35]
+tj = 0
+
+
+
+def image_judge(known_image, unknown_image, flag):
+    # 获取目标人面部编码
+    global tole
+    global tj
+    known_image = face_recognition.load_image_file(known_image)
+    unknown_image = face_recognition.load_image_file(unknown_image)
+
+    # 返回一个待测人群的面部编码
+    obama_encoding = face_recognition.face_encodings(known_image)[0]
+    unknown_encoding1 = face_recognition.face_encodings(unknown_image)
+    # print(unknown_encoding1)
+    #
+    # for i in range(len(unknown_encoding1)):
+    # 返回的是一个True或者一个False的列表
+    if face_recognition.compare_faces([obama_encoding], unknown_encoding1[flag], tolerance=tole[tj])[0]:  # 判断  tolerance值越小越精确
+        return True
+    else:
+        return False
+
+def image_handle(known_image, image_ip):
+    global tole
+    global tj
+    image = face_recognition.load_image_file(image_ip)
+    face_locations = face_recognition.face_locations(image)
+    face_landmarks_list = face_recognition.face_landmarks(image)#返回字典
+    arr=face_landmarks_list[0]
+    faceNum = len(face_locations)
+    #print(image)
+    print("人脸个数是:", faceNum)
+    # 读取原图，准备做标志
+    pil_image = Image.fromarray(image)
+    arr = []
+    mubiao = 0
+    flag_image = 1
+    for i in range(0, faceNum):
+        # 面部区域的四个坐标
+        top = face_locations[i][0]
+        right = face_locations[i][1]
+        bottom = face_locations[i][2]
+        left = face_locations[i][3]
+        face_image = image[top:bottom, left:right]  
+        # 画图
+        if image_judge(known_image, image_ip, i):
+            d = ImageDraw.Draw(pil_image, 'RGBA')
+            d.rectangle((left, top, right, bottom), outline="#A00DAB")  # 目标人物用紫色圈出来
+            arr.append(i)
+            mubiao = mubiao + 1
+        else:
+            d = ImageDraw.Draw(pil_image, 'RGBA')
+            d.rectangle((left, top, right, bottom), outline="#0DABA0")  # 非目标人物则用蓝色圈出来
+        
+        #cv2.putText(d, str(flag_image), (top, right), font, 2, (0, 250, 0))
+        #cv2.putText(face_image, str(flag_image), ((left + right) // 2, (top + bottom) // 2), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (133, 255, 133), 2)
+        flag_image = flag_image + 1
+        #画嘴巴部分
+        if i == faceNum-1:
+            #d = ImageDraw.Draw(pil_image)
+            for i in face_landmarks_list:
+                for facial_feature in i.keys():
+                    if facial_feature == 'top_lip' or facial_feature=='bottom_lip':
+                        d.line(i[facial_feature], width=10)
+            #img = cv2.cvtColor(numpy.asarray(face_image),cv2.COLOR_RGB2BGR)
+            #cv2.imwrite("image\\end_image\\"+'thnu_jqr_ends'+".jpg",img)
+    
+    #阈值
+    while True:
+        print(mubiao, tole[tj])
+        if len(arr) > 1:
+            tj = tj + 1
+            for i in arr:
+                # 面部区域的四个坐标
+                top = face_locations[i][0]
+                right = face_locations[i][1]
+                bottom = face_locations[i][2]
+                left = face_locations[i][3]
+                # 画图
+                if image_judge(known_image, image_ip, i):
+                    d = ImageDraw.Draw(pil_image, 'RGBA')
+                    d.rectangle((left, top, right, bottom), outline="#A00DAB")  # 目标人物用紫色圈出来
+                else:
+                    d = ImageDraw.Draw(pil_image, 'RGBA')
+                    d.rectangle((left, top, right, bottom), outline="#0DABA0")  # 非目标人物则用蓝色圈出来
+                    arr.remove(i)
+                    mubiao = mubiao - 1
+        elif len(arr) < 1:
+            tj = tj - 1
+            for i in range(0, faceNum):
+                # 面部区域的四个坐标
+                top = face_locations[i][0]
+                right = face_locations[i][1]
+                bottom = face_locations[i][2]
+                left = face_locations[i][3]
+                # 画图
+                if image_judge(known_image, image_ip, i):
+                    arr.append(i)
+                    mubiao = mubiao + 1
+                #else:
+                 #   d = ImageDraw.Draw(pil_image, 'RGBA')
+                  #  d.rectangle((left, top, right, bottom), outline="#0DABA0")  # 非目标人物则用蓝色圈出来
+        else:
+            break
+
+    # 显示标志后的图片
+    pil_image.show()
+    img = cv2.cvtColor(numpy.asarray(pil_image),cv2.COLOR_RGB2BGR)
+    cv2.imwrite("image\\end_image\\"+'thnu_jqr_ends'+".jpg",img)#最终图片（包含嘴巴，人脸的框选）
+if __name__ == "__main__":
+    image_handle('image/target/10.jpg','image/1.jpg')
